@@ -61,7 +61,38 @@ object VoicePreparer {
         val to = (e * SAMPLE_RATE / 1000).toInt().coerceIn(from, samples.size)
         samples = samples.copyOfRange(from, to)
 
-        samples = Dsp.removeDc(samples)
+        return finish(context, samples, preset, extraGainDb, autoTrimSilence, "clip.wav")
+    }
+
+    /**
+     * 直接处理一段内存里的采样（悬浮球录的音走这里）。
+     * 后面所有处理跟选文件完全一样，所以录出来的东西和导入的音频听感一致。
+     */
+    fun prepareFromSamples(
+        context: Context,
+        input: FloatArray,
+        sampleRate: Int,
+        preset: Preset,
+        extraGainDb: Float,
+        autoTrimSilence: Boolean,
+        fileName: String = "record.wav",
+    ): PreparedClip {
+        require(input.isNotEmpty()) { "录音是空的" }
+        val samples = Dsp.linearResample(input, sampleRate, SAMPLE_RATE)
+        return finish(context, samples, preset, extraGainDb, autoTrimSilence, fileName)
+    }
+
+    /** 采样已经是 [SAMPLE_RATE] 之后的统一后处理。 */
+    private fun finish(
+        context: Context,
+        samplesIn: FloatArray,
+        preset: Preset,
+        extraGainDb: Float,
+        autoTrimSilence: Boolean,
+        fileName: String,
+    ): PreparedClip {
+        require(samplesIn.isNotEmpty()) { "没有可用的音频" }
+        var samples = Dsp.removeDc(samplesIn)
 
         if (preset.hpHz > 20f || preset.lpHz > 300f) {
             samples = Dsp.telephoneBand(
@@ -83,7 +114,7 @@ object VoicePreparer {
         samples = Dsp.normalize(samples, preset.targetRmsDb + extraGainDb, 0.95f)
         samples = Dsp.fade(samples, SAMPLE_RATE, 8, 60)
 
-        val outFile = File(File(context.cacheDir, "clips").apply { mkdirs() }, "clip.wav")
+        val outFile = File(File(context.cacheDir, "clips").apply { mkdirs() }, fileName)
         WavIo.writeMono16(outFile, samples, SAMPLE_RATE)
 
         return PreparedClip(

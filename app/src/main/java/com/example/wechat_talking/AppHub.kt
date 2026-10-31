@@ -47,6 +47,10 @@ object AppHub {
 
     var busy by mutableStateOf<String?>(null)
         private set
+
+    /** 正在解析刚选中的音频（界面把「选择音频文件」换成「正在解析」）。 */
+    var parsing by mutableStateOf(false)
+        private set
     var message by mutableStateOf<String?>(null)
     var clip by mutableStateOf<PreparedClip?>(null)
         private set
@@ -99,16 +103,19 @@ object AppHub {
 
     fun pick(ctx: Context, picked: Uri?) {
         if (picked == null) return
+        stopPreview()
+        parsing = true
         busy = "正在读取音频…"
         message = null
         scope.launch {
             try {
                 val pcm = withContext(Dispatchers.IO) { AudioDecoder.decode(ctx, picked) }
                 val peaks = withContext(Dispatchers.Default) { Dsp.envelope(pcm.samples, 1200) }
+                val name = withContext(Dispatchers.IO) { resolveDisplayName(ctx, picked) }
                 val ms = Dsp.durationMs(pcm.samples.size, pcm.sampleRate)
                 decoded = pcm
                 uri = picked
-                fileName = picked.lastPathSegment?.substringAfterLast('/') ?: "音频"
+                fileName = name
                 sourcePeaks = peaks
                 sourceDurationMs = ms
                 trimStartMs = 0f
@@ -124,8 +131,27 @@ object AppHub {
                 uri = null
                 sourcePeaks = FloatArray(0)
                 sourceDurationMs = 0L
+            } finally {
+                parsing = false
             }
         }
+    }
+
+    /** 从内容 uri 里把原始文件名拿出来（MediaStore 的 lastPathSegment 只是个数字 id）。 */
+    private fun resolveDisplayName(ctx: Context, uri: Uri): String {
+        val fromProvider = runCatching {
+            ctx.contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { c ->
+                if (c.moveToFirst() && c.columnCount > 0) c.getString(0) else null
+            }
+        }.getOrNull()
+        if (!fromProvider.isNullOrBlank()) return fromProvider
+        return uri.lastPathSegment?.substringAfterLast('/') ?: "音频"
     }
 
     fun prepare(ctx: Context) {
@@ -133,6 +159,7 @@ object AppHub {
             message = "先选一个音频文件"
             return
         }
+        stopPreview()
         busy = "正在处理音频…"
         message = null
         scope.launch {
@@ -166,6 +193,7 @@ object AppHub {
             message = "先生成一次片段"
             return
         }
+        stopPreview()
         CastBus.state.value = com.example.wechat_talking.play.CastState.Idle
         VoiceCastEngine.play(
             context = ctx,
@@ -211,38 +239,78 @@ object AppHub {
         }
     }
 
-    fun guidedSend(ctx: Context) {
-        val c = clip ?: run {
-            message = "先生成一次片段"
-            return
-        }
-        val svc = RecordButtonService.instance ?: run {
-            message = "手动倒数需要无障碍服务来画倒数提示"
-            return
-        }
-        svc.startGuidedSession(c)
+    /**
+     * 悬浮球录音处理完就绪：直接当成当前片段，点球就能发。
+     * 录进来的东西和主页选的文件不是一回事，所以把裁剪条清掉，避免误以为还能按原文件重新生成。
+     */
+    fun adoptRecordedClip(ctx: Context, clip: PreparedClip, sourceMs: Long) {
+        stopPreview()
+        this.clip = clip
+        fileName = "悬浮窗录音 ${"%.1f".format(sourceMs / 1000f)}s"
+        sourcePeaks = FloatArray(0)
+        sourceDurationMs = sourceMs
+        trimStartMs = 0f
+        trimEndMs = 0f
+        RecordButtonService.pendingClip = clip
+        RecordButtonService.instance?.refreshBubbleColor()
+        busy = null
+        message = "已录好 ${"%.1f".format(clip.durationMs / 1000f)} 秒，点悬浮球就能发到微信"
+    }
+
+    /** 给无障碍服务报告进度用（busy 是 private set）。 */
+    fun setBusyHint(text: String?) {
+        busy = text
     }
 
     private var preview: android.media.MediaPlayer? = null
 
-    /** 试听任意本地 wav（处理后片段 / 自检回采）。 */
-    fun previewFile(path: String?) {
+    /** 当前正在试听的本地文件；界面靠它把按钮切成「停止试听」。 */
+    var previewingPath by mutableStateOf<String?>(null)
+        private set
+
+    /** 试听任意本地 wav（处理后片段 / 自检回采）。同一个文件再点一次 = 停止。 */
+    fun togglePreview(path: String?) {
         if (path == null) return
-        runCatching {
-            preview?.stop()
-            preview?.release()
+        if (previewingPath == path && preview != null) {
+            stopPreview()
+            return
         }
-        preview = null
+        stopPreview()
         runCatching {
             val mp = android.media.MediaPlayer()
             mp.setDataSource(path)
             mp.prepare()
-            mp.start()
             mp.setOnCompletionListener {
                 runCatching { it.release() }
-                preview = null
+                if (preview === it) {
+                    preview = null
+                    previewingPath = null
+                }
             }
+            mp.setOnErrorListener { player, _, _ ->
+                runCatching { player.release() }
+                if (preview === player) {
+                    preview = null
+                    previewingPath = null
+                }
+                true
+            }
+            mp.start()
             preview = mp
+            previewingPath = path
+        }.onFailure {
+            preview = null
+            previewingPath = null
+            message = "试听失败：${it.message}"
         }
+    }
+
+    /** 停止试听（没在放就什么也不做）。 */
+    fun stopPreview() {
+        val mp = preview
+        preview = null
+        previewingPath = null
+        runCatching { if (mp?.isPlaying == true) mp.stop() }
+        runCatching { mp?.release() }
     }
 }

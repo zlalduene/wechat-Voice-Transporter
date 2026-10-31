@@ -61,7 +61,6 @@ fun HomeScreen(
     onStop: () -> Unit,
     onSelfTest: () -> Unit,
     onToggleBubble: () -> Unit,
-    onGuided: () -> Unit,
     onOpenAccessibility: () -> Unit,
     onPreviewClip: () -> Unit,
 ) {
@@ -89,7 +88,7 @@ fun HomeScreen(
             SectionCard("① 选择音频") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = onPickFile, enabled = AppHub.busy == null) {
-                        Text("选择音频文件")
+                        Text(if (AppHub.parsing) "正在解析，请稍候…" else "选择音频文件")
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
@@ -107,6 +106,12 @@ fun HomeScreen(
                         }
                     }
                 }
+                Text(
+                    "点「选择音频文件」会直接列出手机里的音频（可按名字搜索、按时间/名称排序），" +
+                        "也可以在列表底部进文件夹自己找。",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // ---------------------------------------------------------- 2 裁剪
@@ -223,7 +228,10 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = onPreviewClip) { Text("试听") }
+                        val previewing = AppHub.previewingPath == clip.file.absolutePath
+                        OutlinedButton(onClick = onPreviewClip) {
+                            Text(if (previewing) "停止试听" else "试听")
+                        }
                         OutlinedButton(onClick = onPlay) { Text("按发射音量播一遍") }
                         if (castState is CastState.Playing) {
                             TextButton(onClick = onStop) { Text("停止") }
@@ -242,7 +250,7 @@ fun HomeScreen(
                 )
                 if (!accessibilityOn) {
                     OutlinedButton(onClick = onOpenAccessibility, modifier = Modifier.fillMaxWidth()) {
-                        Text("去开启无障碍服务")
+                        Text("去开启无障碍服务（自动定位到本应用）")
                     }
                     Text(
                         "为什么会反复要求重开：无障碍授权在系统里只是一个设置项，" +
@@ -259,25 +267,23 @@ fun HomeScreen(
                     fontSize = 12.sp,
                     color = if (AppHub.calibrationText == "未校准") Color(0xFFD32F2F) else WeChatGreen,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(
-                        onClick = onToggleBubble,
-                        modifier = Modifier.weight(1f),
-                        enabled = accessibilityOn,
-                    ) { Text("显示/隐藏悬浮球") }
-                    OutlinedButton(
-                        onClick = onGuided,
-                        modifier = Modifier.weight(1f),
-                        enabled = accessibilityOn && clip != null,
-                    ) { Text("倒数（我自己按）") }
-                }
+                OutlinedButton(
+                    onClick = onToggleBubble,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = accessibilityOn,
+                ) { Text("显示/隐藏悬浮球") }
                 Text(
                     "步骤：\n" +
                         "① 点「显示悬浮球」\n" +
                         "② 切到微信打开聊天，并切到语音输入模式，让「按住 说话」露出来\n" +
                         "③ 第一次点绿色圆球：会让你点一下「按住 说话」的位置，记住坐标\n" +
                         "④ 之后每次点圆球 = 自动长按 + 播放音频 = 发出一条语音消息\n\n" +
-                        "长按圆球可以重新校准。微信屏蔽了控件读取，所以只能靠坐标，换机型/换输入法布局后重校一次即可。",
+                        "长按圆球会弹菜单：发送当前语音 / 开始录音 / 重新校准按钮位置 / " +
+                        "使用说明 / 诊断 / 隐藏悬浮球。第一次用建议先点菜单里的「使用说明」。\n\n" +
+                        "刷视频想发里面的声音：长按球 →「开始录音」→ 录完点一下球停止，" +
+                        "处理完再点球就能发。录音最长 59 秒。\n\n" +
+                        "圆球可以随便拖，位置会记住，不会拖出屏幕；换机型或微信改版后，" +
+                        "长按球 →「重新校准按钮位置」重校一次即可。",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -303,9 +309,12 @@ fun HomeScreen(
                         fontSize = 12.sp,
                     )
                     Text(r.verdict, fontSize = 13.sp, color = WeChatGreen, fontWeight = FontWeight.Medium)
-                    if (r.capturedFile != null) {
-                        OutlinedButton(onClick = { AppHub.previewFile(r.capturedFile) }) {
-                            Text("听一下回采结果")
+                    val captured = r.capturedFile
+                    if (captured != null) {
+                        OutlinedButton(onClick = { AppHub.togglePreview(captured) }) {
+                            Text(
+                                if (AppHub.previewingPath == captured) "停止试听" else "听一下回采结果",
+                            )
                         }
                     }
                 }

@@ -65,4 +65,37 @@ object AutoSettings {
             .remove("calib_w").remove("calib_h")
             .apply()
     }
+
+    // ---------------------------------------------------------------- 悬浮球位置
+    // 记住拖到哪，下次显示还在那儿；但屏幕尺寸变了（转屏/换分辨率）就回默认位置，
+    // 否则会落在屏幕外面。
+
+    data class BubblePos(val x: Int, val y: Int, val screenW: Int, val screenH: Int) {
+        fun stillValid(w: Int, h: Int) = screenW == w && screenH == h
+    }
+
+    fun bubblePosition(ctx: Context): BubblePos? {
+        val p = prefs(ctx)
+        val x = p.getInt("bubble_x", Int.MIN_VALUE)
+        val y = p.getInt("bubble_y", Int.MIN_VALUE)
+        val w = p.getInt("bubble_w", -1)
+        val h = p.getInt("bubble_h", -1)
+        if (x == Int.MIN_VALUE || y == Int.MIN_VALUE || w <= 0 || h <= 0) return null
+        return BubblePos(x, y, w, h)
+    }
+
+    fun setBubblePosition(ctx: Context, x: Int, y: Int, screenW: Int, screenH: Int) {
+        prefs(ctx).edit()
+            .putInt("bubble_x", x)
+            .putInt("bubble_y", y)
+            .putInt("bubble_w", screenW)
+            .putInt("bubble_h", screenH)
+            .apply()
+    }
+
+    // ---------------------------------------------------------------- 首次提示
+
+    fun tipsSeen(ctx: Context): Boolean = prefs(ctx).getBoolean("tips_seen", false)
+
+    fun setTipsSeen(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean("tips_seen", v).apply()
 }
