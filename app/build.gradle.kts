@@ -13,7 +13,7 @@ android {
         targetSdk = 34
         versionCode = 101
         versionName = "1.0.1"
-
+        resourceConfigurations += listOf("zh", "en")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -32,7 +32,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true        // R8 代码压缩、混淆、删除无用代码
+            isShrinkResources = true      // 删除未使用的资源
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
