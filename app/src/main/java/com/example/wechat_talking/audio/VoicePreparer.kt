@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import java.io.File
 
-/** 处理预设。微信语音的有效带宽很窄，所以预设的差别主要在频带和响度。 */
+/** 处理预设。微信语音的有效带宽很窄，所以预设的差别主要在频带和响度；变声预设额外跑一遍 FFmpeg。 */
 data class Preset(
     val id: String,
     val name: String,
@@ -12,12 +12,16 @@ data class Preset(
     val hpHz: Float,
     val lpHz: Float,
     val targetRmsDb: Float,
+    val effect: VoiceEffect? = null,
 ) {
     companion object {
         val NATURAL = Preset("natural", "保真", "不切频带，只做响度对齐", 20f, 0f, -16f)
         val CLEAR = Preset("clear", "清晰", "切到电话频带，人声最突出（推荐）", 150f, 3800f, -14f)
         val LOUD = Preset("loud", "响", "更窄的频带 + 更高电平，穿透力最强", 200f, 3200f, -10f)
-        val ALL = listOf(CLEAR, NATURAL, LOUD)
+        val DEEP = Preset("deep", "大叔", "FFmpeg 降调 18%，声音更低沉", 150f, 3800f, -14f, VoiceEffect.DEEP)
+        val CHILD = Preset("child", "萝莉", "FFmpeg 升调 30%，更细更尖", 150f, 3800f, -14f, VoiceEffect.CHILD)
+        val ROBOT = Preset("robot", "机器人", "降位深 + 回声，机械电音感", 150f, 3800f, -14f, VoiceEffect.ROBOT)
+        val ALL = listOf(CLEAR, NATURAL, LOUD, DEEP, CHILD, ROBOT)
     }
 }
 
@@ -94,6 +98,11 @@ object VoicePreparer {
         require(samplesIn.isNotEmpty()) { "没有可用的音频" }
         var samples = Dsp.removeDc(samplesIn)
 
+        // 变声先做，后面的频带 / 响度处理和普通预设完全一致
+        preset.effect?.let { effect ->
+            samples = applyEffect(context, samples, effect, fileName)
+        }
+
         if (preset.hpHz > 20f || preset.lpHz > 300f) {
             samples = Dsp.telephoneBand(
                 samples,
@@ -126,6 +135,29 @@ object VoicePreparer {
             rmsDb = Dsp.toDb(Dsp.rms(samples)),
             peakDb = Dsp.toDb(Dsp.peak(samples)),
         )
+    }
+
+    /** 用 FFmpeg 跑一遍变声滤镜，再把结果读回内存。 */
+    private fun applyEffect(
+        context: Context,
+        samples: FloatArray,
+        effect: VoiceEffect,
+        fileName: String,
+    ): FloatArray {
+        val dir = File(File(context.cacheDir, "clips"), "fx").apply { mkdirs() }
+        val tag = fileName.substringBeforeLast('.')
+        val input = File(dir, "$tag.in.wav")
+        val output = File(dir, "$tag.out.wav")
+        try {
+            WavIo.writeMono16(input, samples, SAMPLE_RATE)
+            VoiceChanger.apply(input, output, effect.filter)
+            val (out, rate) = WavIo.readMono16(output)
+            require(out.isNotEmpty()) { "变声处理失败：没有输出声音" }
+            return if (rate == SAMPLE_RATE) out else Dsp.linearResample(out, rate, SAMPLE_RATE)
+        } finally {
+            input.delete()
+            output.delete()
+        }
     }
 
     /** 只读波形包络，用于选完文件后立刻画图（不解码整段的话也可以，这里简单起见解码一次）。 */

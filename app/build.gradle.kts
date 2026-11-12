@@ -14,6 +14,10 @@ android {
         versionCode = 101
         versionName = "1.0.1"
         resourceConfigurations += listOf("zh", "en")
+        // FFmpeg 的 so 很大，只打包 64 位 ARM，避免 APK 里塞两份
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -71,6 +75,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation(libs.ffmpeg.kit.min)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

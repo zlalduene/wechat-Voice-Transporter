@@ -3,6 +3,7 @@ package com.example.wechat_talking.ui
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -162,7 +163,10 @@ fun HomeScreen(
 
             // ---------------------------------------------------------- 3 参数
             SectionCard("③ 处理方式") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Preset.ALL.forEach { p ->
                         PresetChip(p.name, AppHub.preset.id == p.id) { AppHub.preset = p }
                     }
