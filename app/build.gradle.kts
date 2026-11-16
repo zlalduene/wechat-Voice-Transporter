@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.wechat_talking"
         minSdk = 24
         targetSdk = 34
-        versionCode = 101
-        versionName = "1.0.1"
+        versionCode = 102
+        versionName = "1.0.2"
         resourceConfigurations += listOf("zh", "en")
         // FFmpeg 的 so 很大，只打包 64 位 ARM，避免 APK 里塞两份
         ndk {

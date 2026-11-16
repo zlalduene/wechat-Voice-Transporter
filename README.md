@@ -1,6 +1,6 @@
 # 语音搬运工 · WeChat Voice Transporter
 
-> 把手机里的任意音频，变成微信聊天里的一条**真正的语音消息** —— 带时长、能转文字、能转发，而不是一个音频文件。
+> 把手机里的任意音频，变成微信聊天里的一条**真正的语音消息** —— 带时长、能转文字、能转发、还能**变声**，而不是一个音频文件。
 
 微信的语音是它自己录出来的 SILK 文件，普通 App 不 root 写不进微信的数据目录。  
 这个项目的做法很直接：**让微信自己录一遍**。用无障碍服务替你在聊天框的「按住 说话」上下发长按手势，同时把准备好的音频从喇叭放出来，微信的麦克风收进去，于是一条真语音就诞生了。
@@ -36,7 +36,9 @@
 
 - 支持 mp3 / m4a / wav / flac / ogg / amr / aac 等系统能解码的格式；
 - 波形裁剪：拖动选择要发送的片段（微信上限 60 秒，这里最多 56 秒）；
-- 三档预设：**清晰**（电话频带，推荐）、**保真**、**响**（更窄频带 + 更高电平）；
+- 六档预设：
+  - **清晰**（电话频带，推荐）、**保真**、**响**（更窄频带 + 更高电平）；
+  - **变声**三档：**大叔**（FFmpeg 降调 18%，声音低沉）、**萝莉**（升调 30%，更细更尖）、**机器人**（降位深 + 回声，机械电音感）——变声只改音色，不改语速，听起来是「换了个嗓子」而不是快进；
 - 响度微调（-6 ~ +8 dB）、自动削掉首尾静音；
 - 试听随时可停（同一按钮切换「试听 / 停止试听」）。
 
@@ -178,6 +180,7 @@ app/src/main/java/com/example/wechat_talking/
 │   ├── AudioDecoder.kt          # MediaExtractor + MediaCodec 解码
 │   ├── AudioLibrary.kt          # MediaStore 音频扫描
 │   ├── Dsp.kt                   # 滤波、归一化、削静音等轻量 DSP
+│   ├── VoiceChanger.kt          # FFmpeg 变声滤镜（大叔 / 萝莉 / 机器人）
 │   ├── VoicePreparer.kt         # 片段处理流水线
 │   └── WavIo.kt                 # 16bit PCM WAV 读写
 ├── auto/
@@ -200,6 +203,7 @@ app/src/main/java/com/example/wechat_talking/
 - 无障碍服务（`AccessibilityService` + `dispatchGesture`）实现自动长按与悬浮窗
 - `MediaExtractor` / `MediaCodec` 解码，`AudioTrack` 播放
 - 自研轻量 DSP：电话频带滤波、RMS 归一化、软限幅、静音裁剪、线性重采样
+- 变声：`FFmpegKit` 音频滤镜链（`asetrate` 变调 + `atempo` 拉回时长、`acrusher` + `aecho` 做机械音）
 
 ---
 
